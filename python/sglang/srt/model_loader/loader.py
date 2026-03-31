@@ -299,6 +299,29 @@ class BaseModelLoader(ABC):
         raise NotImplementedError
 
 
+def _pin_memory_iterator(
+    weights: Generator[Tuple[str, torch.Tensor], None, None],
+) -> Generator[Tuple[str, torch.Tensor], None, None]:
+    """Wrap a weights iterator to pin CPU tensors for faster H2D transfers.
+
+    When CUDA copies from pageable (non-pinned) host memory, it must first
+    stage through an internal pinned buffer. Pre-pinning eliminates this
+    extra copy, improving PCIe utilization for host-to-device transfers.
+    """
+    if not torch.cuda.is_available():
+        yield from weights
+        return
+    for name, tensor in weights:
+        if tensor.is_cpu and not tensor.is_pinned():
+            try:
+                yield name, tensor.pin_memory()
+            except RuntimeError:
+                # pin_memory can fail for some tensor types (e.g. sparse)
+                yield name, tensor
+        else:
+            yield name, tensor
+
+
 class DefaultModelLoader(BaseModelLoader):
     """Model loader that can load different file types from disk."""
 
@@ -342,7 +365,7 @@ class DefaultModelLoader(BaseModelLoader):
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
         extra_config = load_config.model_loader_extra_config
-        allowed_keys = {"enable_multithread_load", "num_threads"}
+        allowed_keys = {"enable_multithread_load", "num_threads", "enable_pinned_h2d"}
         unexpected_keys = set(extra_config.keys()) - allowed_keys
 
         if unexpected_keys:
@@ -686,9 +709,12 @@ class DefaultModelLoader(BaseModelLoader):
                     quant_config,
                 )
 
-            self.load_weights_and_postprocess(
-                model, self._get_all_weights(model_config, model), target_device
-            )
+            weights = self._get_all_weights(model_config, model)
+            if self.load_config.model_loader_extra_config.get(
+                "enable_pinned_h2d", False
+            ):
+                weights = _pin_memory_iterator(weights)
+            self.load_weights_and_postprocess(model, weights, target_device)
 
         self.counter_after_loading_weights = time.perf_counter()
         return model.eval()
