@@ -1018,7 +1018,12 @@ def default_weight_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> N
                 f"into parameter ({param.size()})"
             )
 
-            param.data.copy_(loaded_weight)
+            # Use non_blocking=True when source is pinned memory.
+            # This allows the H2D transfer to overlap with CPU-side
+            # processing of subsequent tensors (name mapping, TP sharding).
+            # Requires torch.cuda.synchronize() after all weights are loaded.
+            non_blocking = loaded_weight.is_pinned() if loaded_weight.is_cpu else False
+            param.data.copy_(loaded_weight, non_blocking=non_blocking)
     except Exception:
         # NOTE: This exception is added for the purpose of setting breakpoint to
         # debug weight loading issues.

@@ -715,6 +715,10 @@ class DefaultModelLoader(BaseModelLoader):
             ):
                 weights = _pin_memory_iterator(weights)
             self.load_weights_and_postprocess(model, weights, target_device)
+            if self.load_config.model_loader_extra_config.get(
+                "enable_pinned_h2d", False
+            ):
+                torch.cuda.synchronize()
 
         self.counter_after_loading_weights = time.perf_counter()
         return model.eval()
