@@ -318,7 +318,7 @@ class HiCacheController:
             self.page_get_func = self._generic_page_get
             self.page_set_func = self._generic_page_set
 
-            if (self.storage_backend_type in ["hf3fs", "mooncake", "eic"]) or (
+            if (self.storage_backend_type in ["hf3fs", "mooncake", "eic", "flexkv"]) or (
                 self.storage_backend_type == "dynamic"
                 and bool(self.storage_config.extra_config.get("interface_v1", 0))
             ):
@@ -634,7 +634,14 @@ class HiCacheController:
             ]
             prev_completed_tokens = operation.completed_tokens
             # Get one batch token, and update the completed_tokens if succeed
-            extra_info = HiCacheStorageExtraInfo(prefix_keys=prefix_keys)
+            batch_start = i * self.page_size
+            batch_end = min(
+                (i + len(batch_hashes)) * self.page_size, len(operation.token_ids)
+            )
+            extra_info = HiCacheStorageExtraInfo(
+                prefix_keys=prefix_keys,
+                extra_info={"token_ids": operation.token_ids[batch_start:batch_end]},
+            )
             self.page_get_func(operation, batch_hashes, batch_host_indices, extra_info)
             # Check termination
             if (
@@ -693,7 +700,10 @@ class HiCacheController:
                     batch_tokens[i : i + self.page_size], last_hash
                 )
                 batch_hashes.append(last_hash)
-            extra_info = HiCacheStorageExtraInfo(prefix_keys=prefix_keys)
+            extra_info = HiCacheStorageExtraInfo(
+                prefix_keys=prefix_keys,
+                extra_info={"token_ids": batch_tokens},
+            )
             hit_page_num = self.storage_backend.batch_exists(batch_hashes, extra_info)
             hash_value.extend(batch_hashes[:hit_page_num])
             storage_query_count += hit_page_num * self.page_size
@@ -793,7 +803,15 @@ class HiCacheController:
             ]
             # Set one batch token, and record if success.
             # todo: allow partial success
-            extra_info = HiCacheStorageExtraInfo(prefix_keys=prefix_keys)
+            batch_start = i * self.page_size
+            batch_end = min(
+                (i + len(batch_hashes)) * self.page_size, len(operation.token_ids)
+            )
+            batch_token_ids = operation.token_ids[batch_start:batch_end]
+            extra_info = HiCacheStorageExtraInfo(
+                prefix_keys=prefix_keys,
+                extra_info={"token_ids": batch_token_ids},
+            )
             success = self.page_set_func(batch_hashes, batch_host_indices, extra_info)
             if not success:
                 logger.warning(
