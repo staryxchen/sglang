@@ -778,6 +778,18 @@ class Scheduler(
                     rank=self.tp_rank,
                     tp_group=self.tp_group,
                 )
+            elif server_args.enable_flexkv_radix:
+                from flexkv.integration.sglang.flexkv_radix_cache import (
+                    FlexKVRadixCache,
+                )
+
+                self.tree_cache = FlexKVRadixCache(
+                    params=params,
+                    model_config=self.model_config,
+                    tp_size=self.tp_size,
+                    rank=self.tp_rank,
+                    tp_group=self.tp_group,
+                )
             else:
                 self.tree_cache = RadixCache(params)
 

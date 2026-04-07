@@ -445,6 +445,8 @@ class ServerArgs:
     hicache_storage_backend_extra_config: Optional[str] = None
     # LMCache
     enable_lmcache: bool = False
+    # FlexKV RadixCache replacement (direct GPU transfer, alternative to HiCache L3)
+    enable_flexkv_radix: bool = False
 
     # Ktransformers/AMX expert parallelism
     kt_weight_path: Optional[str] = None
@@ -3268,6 +3270,12 @@ class ServerArgs:
             "--enable-lmcache",
             action="store_true",
             help="Using LMCache as an alternative hierarchical cache solution",
+        )
+        # FlexKV RadixCache
+        parser.add_argument(
+            "--enable-flexkv-radix",
+            action="store_true",
+            help="Using FlexKV as a RadixCache replacement with direct GPU transfer",
         )
 
         # Ktransformer server args
