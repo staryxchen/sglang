@@ -181,9 +181,7 @@ class StorageBackendFactory:
 
             dtype = mem_pool_host.dtype
             return backend_class.from_env_config(bytes_per_page, dtype, storage_config)
-        elif backend_name == "eic":
-            return backend_class(storage_config, mem_pool_host)
-        elif backend_name == "flexkv":
+        elif backend_name in ("eic", "flexkv"):
             return backend_class(storage_config, mem_pool_host)
         else:
             raise ValueError(f"Unknown built-in backend: {backend_name}")
