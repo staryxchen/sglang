@@ -48,6 +48,27 @@ logger = logging.getLogger(__name__)
 device_module = get_device_module()
 
 
+class LayerwiseStorageEvent:
+    """Per-layer readiness signaling for Storage-to-Host pipeline.
+
+    Allows start_loading() to begin Host-to-GPU transfers per-layer while
+    batch_get_v1() is still copying subsequent layers from FlexKV to Host.
+    """
+
+    def __init__(self, num_layers: int):
+        self._events = [threading.Event() for _ in range(num_layers)]
+        self._num_layers = num_layers
+
+    def signal_layer(self, layer_id: int) -> None:
+        """Signal that *layer_id* data is now in Host memory."""
+        if 0 <= layer_id < self._num_layers:
+            self._events[layer_id].set()
+
+    def wait_layer(self, layer_id: int, timeout: float = 30.0) -> bool:
+        """Block until *layer_id* is ready in Host memory."""
+        return self._events[layer_id].wait(timeout)
+
+
 class LayerLoadingEvent:
     def __init__(self, num_layers: int):
         self._num_layers = num_layers
@@ -352,6 +373,10 @@ class HiCacheController:
         self.write_stream = device_module.Stream()
         self.load_stream = device_module.Stream()
 
+        # Layerwise storage event for pipelining Storage→Host with Host→GPU.
+        # Set by _page_transfer() for FlexKV, consumed by start_loading().
+        self._pending_layerwise_event = None
+
         if self.enable_storage:
             self.prefetch_thread = threading.Thread(
                 target=self.prefetch_thread_func, daemon=True
@@ -507,9 +532,15 @@ class HiCacheController:
         else:
             raise ValueError(f"Unsupported io backend")
 
-    def start_loading(self) -> int:
+    def start_loading(self, layerwise_event: "LayerwiseStorageEvent | None" = None) -> int:
         if len(self.load_queue) == 0:
             return -1
+
+        # Use explicitly passed event, or consume the pending one from
+        # the most recent _page_transfer().
+        if layerwise_event is None:
+            layerwise_event = self._pending_layerwise_event
+            self._pending_layerwise_event = None
 
         producer_id = self.layer_done_counter.update_producer()
         op = CacheOperation.merge_ops(self.load_queue)
@@ -521,6 +552,13 @@ class HiCacheController:
         with device_module.stream(self.load_stream):
             producer_event.start_event.wait(self.load_stream)
             for i in range(self.layer_num):
+                # If a layerwise storage event is provided, wait for this
+                # layer's data to arrive in Host memory before issuing the
+                # Host→GPU DMA command.  This enables overlap between
+                # Storage→Host (FlexKV) and Host→GPU transfers.
+                if layerwise_event is not None:
+                    layerwise_event.wait_layer(i)
+
                 self.mem_pool_host.load_to_device_per_layer(
                     self.mem_pool_device,
                     host_indices,
@@ -588,6 +626,13 @@ class HiCacheController:
     def _page_get_zero_copy(
         self, operation, hash_values, host_indices, extra_info=None
     ):
+        # Inject layer_ready_callback when a layerwise storage event is active
+        lw_event = getattr(operation, '_layerwise_event', None)
+        if lw_event is not None and extra_info is not None:
+            ei = extra_info.extra_info
+            if isinstance(ei, dict):
+                ei["layer_ready_callback"] = lw_event.signal_layer
+
         results = self.storage_backend.batch_get_v1(
             hash_values, host_indices, extra_info
         )
@@ -625,6 +670,16 @@ class HiCacheController:
                 break  # Operation terminated by controller
 
     def _page_transfer(self, operation):
+        # Attach a layerwise event for FlexKV backends so that
+        # start_loading() can begin Host→GPU per-layer as soon as each
+        # layer is written to Host memory by batch_get_v1().
+        if (self.enable_storage
+                and self.storage_backend_type == "flexkv"):
+            operation._layerwise_event = LayerwiseStorageEvent(
+                self.layer_num)
+        else:
+            operation._layerwise_event = None
+
         # Transfer batch by batch
         prefix_keys = operation.prefix_keys
         for i in range(0, len(operation.hash_value), self.storage_batch_size):
@@ -653,6 +708,10 @@ class HiCacheController:
 
             if prefix_keys and len(prefix_keys) > 0:
                 prefix_keys += batch_hashes
+
+        # Stash the layerwise event for start_loading() to consume
+        if operation._layerwise_event is not None:
+            self._pending_layerwise_event = operation._layerwise_event
 
     def prefetch_io_aux_func(self):
         """
