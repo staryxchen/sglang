@@ -9,12 +9,12 @@ from sglang.srt.mem_cache.base_prefix_cache import (
     BasePrefixCache,
     EvictParams,
     EvictResult,
+    InitLoadBackParams,
     MatchPrefixParams,
     MatchResult,
 )
 from sglang.srt.mem_cache.kv_connector import BaseKVConnector, LoadOperation
 from sglang.srt.mem_cache.radix_cache import RadixCache, RadixKey, TreeNode, page_align_keys
-from sglang.srt.mem_cache.base_prefix_cache import InitLoadBackParams
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
     from sglang.srt.mem_cache.cache_init_params import CacheInitParams

@@ -93,6 +93,14 @@ class EvictResult:
     mamba_num_evicted: int = 0
 
 
+@dataclasses.dataclass
+class InitLoadBackParams:
+    """Unified parameters for init_load_back across different cache types"""
+
+    req: Req
+    mem_quota: Optional[int] = None
+
+
 class MatchResult(NamedTuple):
     """Result of a prefix match operation.
 
