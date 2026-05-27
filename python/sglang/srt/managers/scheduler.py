@@ -323,6 +323,8 @@ class Scheduler(
                 self.dp_size,
             )
         )
+        # Context-parallel rank (default 0; populated by CP-enabled paths)
+        self.attn_cp_rank = 0
 
         self.enable_kv_cache_events = bool(
             server_args.kv_events_config and self.attn_tp_rank == 0
