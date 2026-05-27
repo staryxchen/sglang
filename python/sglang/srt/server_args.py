@@ -4931,8 +4931,16 @@ class ServerArgs:
         args.dp_size = args.data_parallel_size
         args.ep_size = args.expert_parallel_size
 
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        return cls(**{attr: getattr(args, attr) for attr in attrs})
+        # Fall back to the dataclass default when a field is not exposed as a
+        # CLI argument (e.g. attn_cp_size).
+        _MISSING = object()
+        kwargs = {}
+        for f in dataclasses.fields(cls):
+            v = getattr(args, f.name, _MISSING)
+            if v is _MISSING:
+                continue  # let dataclass default kick in
+            kwargs[f.name] = v
+        return cls(**kwargs)
 
     def url(self):
         if is_valid_ipv6_address(self.host):
