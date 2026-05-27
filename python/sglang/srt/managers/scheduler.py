@@ -707,10 +707,10 @@ class Scheduler(
                     server_args=server_args,
                     tp_rank=self.tp_rank,
                     dp_rank=self.dp_rank,
-                    attn_cp_rank=self.attn_cp_rank,
+                    attn_cp_rank=getattr(self, "attn_cp_rank", 0),
                     pp_group=self.pp_group,
                     attn_tp_group=self.attn_tp_group,
-                    attn_cp_group=self.attn_cp_group,
+                    attn_cp_group=getattr(self, "attn_cp_group", None),
                 )
                 self.tree_cache = ExtendedRadixCache(params=params, connector=connector)
 
