@@ -625,6 +625,9 @@ class ServerArgs:
     # Context parallelism used in the long sequence prefill phase of DeepSeek v3.2
     enable_nsa_prefill_context_parallel: bool = False
     nsa_prefill_cp_mode: str = "in-seq-split"
+    # Attention context-parallel size (>=1). Currently always 1; reserved for
+    # external KV connectors (e.g. FlexKV) that query this attribute.
+    attn_cp_size: int = 1
     enable_fused_qk_norm_rope: bool = False
     enable_precise_embedding_interpolation: bool = False
 
