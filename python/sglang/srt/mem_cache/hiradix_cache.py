@@ -516,6 +516,7 @@ class HiRadixCache(RadixCache):
         last_node: TreeNode,
         host_hit_length: int,
         mem_quota: Optional[int] = None,
+        **kwargs,  # accept extra kwargs (e.g. req) from callers shared with ExtendedRadixCache
     ):
         _ = host_hit_length  # unused, but kept for compatibility
         if last_node.evicted:

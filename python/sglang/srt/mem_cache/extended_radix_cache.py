@@ -135,12 +135,21 @@ class ExtendedRadixCache(BasePrefixCache):
 
     def init_load_back(
         self,
-        params: InitLoadBackParams
+        params=None,
+        host_hit_length: Optional[int] = None,
+        mem_quota: Optional[int] = None,
+        *,
+        req=None,
     ) -> None:
-        req = params.req
-        mem_quota = params.mem_quota
+        # Accept either the new InitLoadBackParams contract or the legacy
+        # positional contract used by schedule_policy.add_one_req:
+        #   init_load_back(last_host_node, host_hit_length, mem_quota=None,
+        #                  req=<Req>)
+        if isinstance(params, InitLoadBackParams):
+            req = params.req
+            mem_quota = params.mem_quota
 
-        if self._connector is None:
+        if self._connector is None or req is None:
             return
 
         host_hit_length = req.host_hit_length
