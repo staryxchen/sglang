@@ -706,7 +706,7 @@ class Scheduler(
                     params=params,
                     server_args=server_args,
                     tp_rank=self.tp_rank,
-                    dp_rank=self.dp_rank,
+                    dp_rank=self.dp_rank if self.dp_rank is not None else 0,
                     attn_cp_rank=getattr(self, "attn_cp_rank", 0),
                     pp_group=self.pp_group,
                     attn_tp_group=self.attn_tp_group,
