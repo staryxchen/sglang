@@ -257,6 +257,14 @@ def split_node_hash_value(
     return new_node_hash, child_hash
 
 
+def page_align_keys(key: list, page_size: int) -> list:
+    """Truncate ``key`` to a multiple of ``page_size``."""
+    if page_size == 1:
+        return key
+    page_aligned_len = len(key) // page_size * page_size
+    return key[:page_aligned_len]
+
+
 class RadixCache(BasePrefixCache):
     def __init__(self, params: CacheInitParams):
         self.disable = params.disable
@@ -434,10 +442,7 @@ class RadixCache(BasePrefixCache):
         return InsertResult(prefix_len=prefix_len)
 
     def _page_align_keys(self, key: list) -> list:
-        if self.page_size == 1:
-            return key
-        page_aligned_len = len(key) // self.page_size * self.page_size
-        return key[:page_aligned_len]
+        return page_align_keys(key, self.page_size)
 
     def cache_finished_req(self, req: Req, is_insert: bool = True):
         """Cache request when it finishes."""
